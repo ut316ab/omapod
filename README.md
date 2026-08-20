@@ -1,4 +1,4 @@
-#  omapod
+# 🚀 omapod
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Omarchy Linux](https://img.shields.io/badge/Platform-Omarchy%20Linux-blue.svg)](https://omarchy.org)
@@ -12,7 +12,7 @@ Explore daily astronomical wonders, watch space videos with inline transport con
 
 ## ✨ Features
 
--  **Classic Rocket Icon in Status Bar:** Clean, unmistakable Nerd Font rocket (``) icon on the top status bar.
+- 🚀 **Classic Rocket Icon in Status Bar:** Clean, unmistakable Nerd Font rocket (`nf-fa-rocket` / ``) icon on the top status bar.
 - 🌌 **Detailed Astronomy Popup Panel:**
   - High-definition astronomy photos with aspect-fit rendering.
   - **Inline & External Video Player:** Direct MP4 videos play seamlessly inside the card with seek bar, time display, play/pause and volume controls; YouTube/Vimeo streams launch directly in MPV player.
@@ -80,7 +80,7 @@ omarchy-shell shell rescanPlugins
 omarchy restart shell
 ```
 
-The  rocket icon will now appear in your status bar!
+The rocket icon will now appear in your status bar!
 
 ---
 
@@ -102,7 +102,7 @@ You can customize **omapod** by adding options to `dorneles.omapod` in `~/.confi
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `displayFormat` | string | `"icon_only"` | `"icon_only"` (rocket icon only) or `"icon_title"` (icon with truncated title). |
-| `iconStyle` | string | `"rocket"` | Icon style: `"rocket"` (), `"rocket_launch"` (󰛓), `"telescope"` (󰭎), `"planet"` (󰻌), `"star"` (󰓏). |
+| `iconStyle` | string | `"rocket"` | Icon style: `"rocket"` (Classic Rocket), `"rocket_launch"` (Rocket Launch), `"telescope"` (Telescope), `"planet"` (Planet), `"star"` (Star). |
 | `apiKey` | string | `"DEMO_KEY"` | NASA API Key (default `DEMO_KEY`, or your own free key from [api.nasa.gov](https://api.nasa.gov)). |
 
 ---
