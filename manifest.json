@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "dorneles.omapod",
+  "name": "omapod",
+  "version": "1.0.0",
+  "author": "Dorneles",
+  "description": "omapod - NASA Astronomy Picture of the Day (APOD) viewer for Omarchy status bar.",
+  "license": "MIT",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "omapod",
+    "description": "NASA Astronomy Picture of the Day with detailed popup viewer, date navigation, inline video player, 1-click wallpaper, and image copy.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "displayFormat": "icon_only",
+      "iconStyle": "rocket",
+      "apiKey": "DEMO_KEY",
+      "autoRefreshHours": 6,
+      "showTitleInTooltip": true
+    },
+    "schema": [
+      {
+        "key": "displayFormat",
+        "type": "enum",
+        "label": "Bar Display Format",
+        "options": [
+          "icon_only",
+          "icon_title"
+        ],
+        "defaultValue": "icon_only",
+        "description": "Rocket icon only or rocket icon with picture title."
+      },
+      {
+        "key": "iconStyle",
+        "type": "enum",
+        "label": "Icon Style",
+        "options": [
+          "rocket",
+          "rocket_launch",
+          "telescope",
+          "planet",
+          "star"
+        ],
+        "defaultValue": "rocket",
+        "description": "Bar icon style ( Classic Rocket, 󰛓 Rocket Launch, 󰭎 Telescope, 󰻌 Planet, 󰓏 Star)."
+      },
+      {
+        "key": "apiKey",
+        "type": "string",
+        "label": "NASA API Key",
+        "defaultValue": "DEMO_KEY",
+        "description": "NASA API Key (default DEMO_KEY, or get one at api.nasa.gov)."
+      }
+    ]
+  }
+}
