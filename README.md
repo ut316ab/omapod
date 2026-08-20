@@ -8,6 +8,10 @@
 
 Explore daily astronomical wonders, watch space videos with inline transport controls or external MPV player, travel back through decades of NASA history, apply 1-click wallpapers, and copy high-res images directly to your clipboard.
 
+<p align="center">
+  <img src="preview.png" alt="omapod Preview" width="650">
+</p>
+
 ---
 
 ## ✨ Features
