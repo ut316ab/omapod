@@ -34,6 +34,33 @@ APOD_API_URL = "https://api.nasa.gov/planetary/apod"
 FIRST_APOD_DATE = datetime.date(1995, 6, 16)
 
 
+def is_safe_url(url: str) -> bool:
+    """
+    Validate that url is a safe, well-formed HTTP or HTTPS URL.
+    Rejects non-strings, leading dashes (option-confusion), unsupported schemes,
+    missing hostnames, and control/whitespace characters.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    url = url.strip()
+    if url.startswith("-"):
+        return False
+    if any(c in url for c in ("\r", "\n", "\t", "\0", " ")):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme.lower() not in ("http", "https"):
+            return False
+        if not parsed.netloc:
+            return False
+        # Hostname should only contain valid printable ASCII characters
+        if any(ord(c) < 33 or ord(c) > 126 for c in parsed.netloc):
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def get_today_date() -> datetime.date:
     """Return current date in UTC/local."""
     return datetime.date.today()
@@ -59,14 +86,14 @@ def send_notification(title: str, message: str, icon: str = "astronomy"):
 
     if shutil.which("notify-send"):
         try:
-            subprocess.run(["notify-send", "-a", "NASA APOD", title, message], check=False)
+            subprocess.run(["notify-send", "-a", "NASA APOD", "--", title, message], check=False)
         except Exception:
             pass
 
 
 def download_file(url: str, dest_path: Path, timeout: int = 30) -> bool:
     """Download a file with User-Agent header and save to destination."""
-    if not url:
+    if not url or not is_safe_url(url):
         return False
     if dest_path.exists() and dest_path.stat().st_size > 0:
         return True
@@ -137,6 +164,12 @@ def extract_video_thumbnail(video_url: str, dest_path: Path, title: str = "", da
     if dest_path.exists() and dest_path.stat().st_size > 0:
         return True
 
+    if not video_url or not is_safe_url(video_url):
+        svg_path = dest_path.with_suffix(".svg")
+        if create_fallback_svg(title or "Astronomy Video", date_str or "", svg_path):
+            return True
+        return False
+
     # Check for YouTube URL
     yt_match = re.search(r'(?:youtube\.com/(?:embed/|watch\?v=)|youtu\.be/)([a-zA-Z0-9_-]{11})', video_url)
     if yt_match:
@@ -165,7 +198,7 @@ def extract_video_thumbnail(video_url: str, dest_path: Path, title: str = "", da
     if (video_url.endswith(".mp4") or ".mp4" in video_url) and shutil.which("ffmpeg"):
         try:
             subprocess.run(
-                ["ffmpeg", "-y", "-ss", "00:00:00.5", "-i", video_url, "-frames:v", "1", "-update", "1", str(dest_path)],
+                ["ffmpeg", "-y", "-ss", "00:00:00.5", "-i", video_url, "-frames:v", "1", "-update", "1", "--", str(dest_path)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
@@ -250,6 +283,11 @@ def fetch_apod_from_html(target_date: datetime.date) -> dict | None:
                 media_type = "video"
                 media_url = f"https://apod.nasa.gov/apod/{vid_match2.group(1)}"
                 hd_url = media_url
+
+    if media_url and not is_safe_url(media_url):
+        media_url = ""
+    if hd_url and not is_safe_url(hd_url):
+        hd_url = media_url
 
     # Copyright / Credit
     copyright_text = ""
@@ -358,9 +396,18 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
     explanation = apod_raw.get("explanation", "")
     copyright_text = apod_raw.get("copyright", "").strip().replace("\n", " ")
     media_type = apod_raw.get("media_type", "image")
+
     media_url = apod_raw.get("url", "")
+    if not isinstance(media_url, str) or not is_safe_url(media_url):
+        media_url = ""
+
     hd_url = apod_raw.get("hdurl", media_url)
+    if not isinstance(hd_url, str) or not is_safe_url(hd_url):
+        hd_url = media_url
+
     thumbnail_url = apod_raw.get("thumbnail_url", "")
+    if not isinstance(thumbnail_url, str) or not is_safe_url(thumbnail_url):
+        thumbnail_url = ""
 
     # Calculate prev & next dates
     prev_dt = target_date - datetime.timedelta(days=1)
@@ -374,6 +421,8 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
 
     if media_type == "image" and media_url:
         ext = os.path.splitext(urllib.parse.urlparse(media_url).path)[1] or ".jpg"
+        if ext.lower() not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".tif", ".tiff"):
+            ext = ".jpg"
         clean_title = sanitize_filename(title)
         img_filename = f"{iso_date}_{clean_title}{ext}"
         img_path = IMAGES_DIR / img_filename
@@ -451,12 +500,14 @@ def download_hd_image(state: dict) -> str:
         return state.get("local_image", "")
 
     hd_url = state.get("hdurl") or state.get("url")
-    if not hd_url:
+    if not hd_url or not is_safe_url(hd_url):
         return state.get("local_image", "")
 
     iso_date = state.get("date")
     clean_title = sanitize_filename(state.get("title", "apod"))
     ext = os.path.splitext(urllib.parse.urlparse(hd_url).path)[1] or ".jpg"
+    if ext.lower() not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".tif", ".tiff"):
+        ext = ".jpg"
     hd_path = IMAGES_DIR / f"{iso_date}_{clean_title}_hd{ext}"
 
     if hd_path.exists() and hd_path.stat().st_size > 0:
@@ -594,9 +645,12 @@ def copy_to_clipboard(kind: str = "image") -> dict:
     if not url:
         return {"success": False, "error": "No URL available"}
 
+    if not is_safe_url(url):
+        return {"success": False, "error": "Invalid or unsafe URL"}
+
     if shutil.which("wl-copy"):
         try:
-            subprocess.run(["wl-copy", url], check=True)
+            subprocess.run(["wl-copy", "--", url], check=True)
             send_notification("Link Copied", f"Copied {url} to clipboard")
             return {"success": True, "copied": "url", "url": url}
         except Exception as e:
@@ -607,7 +661,7 @@ def copy_to_clipboard(kind: str = "image") -> dict:
 
 def normalize_video_url(url: str) -> str:
     """Normalize YouTube embed/short URLs to standard watch URLs for MPV/yt-dlp."""
-    if not url:
+    if not url or not is_safe_url(url):
         return ""
     yt_match = re.search(r'(?:youtube\.com/(?:embed/|watch\?v=)|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
     if yt_match:
@@ -617,8 +671,8 @@ def normalize_video_url(url: str) -> str:
 
 def probe_video_playable(url: str) -> tuple[bool, str]:
     """Check if stream is playable with yt-dlp/mpv, returning (is_playable, reason)."""
-    if not url:
-        return False, "No URL"
+    if not url or not is_safe_url(url):
+        return False, "Invalid or unsafe video URL"
     if url.endswith(".mp4") or ".mp4" in url:
         return True, ""
 
@@ -626,7 +680,7 @@ def probe_video_playable(url: str) -> tuple[bool, str]:
     if shutil.which("yt-dlp"):
         try:
             res = subprocess.run(
-                ["yt-dlp", "--simulate", "--quiet", "--no-warnings", "--no-playlist", url],
+                ["yt-dlp", "--simulate", "--quiet", "--no-warnings", "--no-playlist", "--", url],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -667,6 +721,9 @@ def play_media() -> dict:
 
     if media_type == "video":
         norm_url = normalize_video_url(media_url)
+        if not norm_url or not is_safe_url(norm_url):
+            return {"success": False, "error": "Invalid or unsafe video URL"}
+
         is_playable, reason = probe_video_playable(norm_url)
 
         if not is_playable:
@@ -675,16 +732,18 @@ def play_media() -> dict:
 
         if shutil.which("mpv"):
             try:
+                clean_title = re.sub(r'[\r\n\t]+', ' ', title).strip()[:100]
                 cmd = [
                     "mpv",
                     "--autofit=960x600",
-                    f"--title=NASA APOD: {title}",
+                    f"--title=NASA APOD: {clean_title}",
                     "--force-window=yes",
                     "--loop-file=inf",
+                    "--",
                     norm_url,
                 ]
                 subprocess.Popen(cmd, start_new_session=True)
-                send_notification("Playing Video", f"NASA APOD: {title}")
+                send_notification("Playing Video", f"NASA APOD: {clean_title}")
                 return {"success": True, "player": "mpv", "url": norm_url}
             except Exception as e:
                 print(f"Error launching mpv: {e}", file=sys.stderr)
@@ -695,7 +754,13 @@ def play_media() -> dict:
     else:
         # Image
         local_img = state.get("local_hd_image") or state.get("local_image")
-        target = local_img if (local_img and os.path.exists(local_img)) else media_url
+        if local_img and os.path.exists(local_img):
+            target = local_img
+        else:
+            if not is_safe_url(media_url):
+                return {"success": False, "error": "Invalid or unsafe media URL"}
+            target = media_url
+
         if shutil.which("xdg-open"):
             subprocess.Popen(["xdg-open", target], start_new_session=True)
             return {"success": True, "player": "xdg-open", "target": target}
@@ -731,13 +796,13 @@ def view_image() -> dict:
     if shutil.which("imv"):
         try:
             env = os.environ.copy()
-            cmd = ["imv", "-c", "bind <Escape> quit", str(image_path)]
+            cmd = ["imv", "-c", "bind <Escape> quit", "--", str(image_path)]
             subprocess.run(cmd, env=env, check=False)
 
             # Reopen plugin panel after imv exits
             omarchy_bin = shutil.which("omarchy")
             if omarchy_bin:
-                subprocess.Popen([omarchy_bin, "shell", "dorneles.nasa-apod", "open"], start_new_session=True)
+                subprocess.Popen([omarchy_bin, "shell", "dorneles.omapod", "open"], start_new_session=True)
 
             return {"success": True, "viewer": "imv", "path": str(image_path)}
         except Exception as e:
@@ -748,7 +813,7 @@ def view_image() -> dict:
             subprocess.run(["xdg-open", image_path], check=False)
             omarchy_bin = shutil.which("omarchy")
             if omarchy_bin:
-                subprocess.Popen([omarchy_bin, "shell", "dorneles.nasa-apod", "open"], start_new_session=True)
+                subprocess.Popen([omarchy_bin, "shell", "dorneles.omapod", "open"], start_new_session=True)
             return {"success": True, "viewer": "xdg-open", "path": str(image_path)}
         except Exception as e:
             print(f"Error launching xdg-open: {e}", file=sys.stderr)
@@ -774,6 +839,9 @@ def open_in_browser(prefer_video_url: bool = False) -> dict:
 
     if not url:
         return {"success": False, "error": "No URL to open"}
+
+    if not is_safe_url(url):
+        return {"success": False, "error": "Invalid or unsafe URL"}
 
     omarchy_bin = shutil.which("omarchy")
     if omarchy_bin:
