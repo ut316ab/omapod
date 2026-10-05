@@ -31,6 +31,10 @@ PICTURES_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_API_KEY = "DEMO_KEY"
 APOD_API_URL = "https://api.nasa.gov/planetary/apod"
+# APOD moved to science.nasa.gov (WordPress); the legacy API above now returns
+# the NASA logo as the image for every date, so this is the primary source.
+SCIENCE_API_URL = "https://science.nasa.gov/wp-json/wp/v2/image-article"
+PREVIEW_WIDTH = 1920
 FIRST_APOD_DATE = datetime.date(1995, 6, 16)
 
 
@@ -316,6 +320,125 @@ def fetch_apod_from_html(target_date: datetime.date) -> dict | None:
     }
 
 
+def is_usable_apod(raw) -> bool:
+    """Reject empty results and the NASA-logo placeholder the legacy API now serves."""
+    if not isinstance(raw, dict):
+        return False
+    url = raw.get("url", "")
+    return bool(url) and isinstance(url, str) and "nasa-logo" not in url
+
+
+def html_to_text(fragment: str) -> str:
+    """Strip tags and collapse whitespace."""
+    text = html.unescape(re.sub(r"<[^>]+>", " ", fragment))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def parse_science_post(post: dict, iso_date: str) -> dict | None:
+    """Convert a science.nasa.gov image-article post into the legacy API's shape."""
+    content = (post.get("content") or {}).get("rendered", "")
+
+    title = ""
+    t_match = re.search(r"<h1[^>]*>(.*?)</h1>", content, re.I | re.S)
+    if t_match:
+        title = html_to_text(t_match.group(1))
+    if not title:
+        title = html_to_text((post.get("title") or {}).get("rendered", ""))
+        title = re.sub(r"^APOD:\s*\d{4}\s+\w+\s+\d{1,2}\s*[–-]\s*", "", title)
+    if not title:
+        title = "Astronomy Picture of the Day"
+
+    explanation = ""
+    e_match = re.search(r"<strong>\s*Explanation:\s*</strong>(.*?)</p>", content, re.I | re.S)
+    if e_match:
+        # Drop trailing "Your Sky Surprise" / "Tomorrow's picture" footers
+        explanation = html_to_text(re.split(r"<strong>", e_match.group(1), maxsplit=1, flags=re.I)[0])
+
+    copyright_text = ""
+    c_match = re.search(r"<th[^>]*>\s*Credit[^<]*</th>\s*<td[^>]*>(.*?)</td>", content, re.I | re.S)
+    if c_match:
+        copyright_text = html_to_text(c_match.group(1))
+        copyright_text = re.sub(r"^(?:Image\s+)?Credit(?:\s*&\s*Copyright)?:\s*", "", copyright_text, flags=re.I)
+
+    # The hero block holds either the picture or an embedded video/interactive
+    hero = content
+    h_match = re.search(r"media-detail-hero__media(.*?)<h1", content, re.I | re.S)
+    if h_match:
+        hero = h_match.group(1)
+    vid_match = re.search(r"<(?:iframe|video|source)\s[^>]*?src=[\"\x27]([^\"\x27]+)[\"\x27]", hero, re.I)
+
+    media_type = "image"
+    media_url = ""
+    hd_url = ""
+    if vid_match:
+        media_type = "video"
+        media_url = html.unescape(vid_match.group(1))
+        hd_url = media_url
+    else:
+        base = (post.get("featured_image") or {}).get("file", "")
+        hd_url = post.get("featured_image_url") or base
+        if not base and hd_url:
+            base = hd_url.split("?", 1)[0]
+        if base:
+            media_url = f"{base}?w={PREVIEW_WIDTH}&fit=clip"
+
+    if not media_url or not is_safe_url(media_url):
+        return None
+    if not hd_url or not is_safe_url(hd_url):
+        hd_url = media_url
+
+    return {
+        "title": title,
+        "date": iso_date,
+        "media_type": media_type,
+        "url": media_url,
+        "hdurl": hd_url,
+        "thumbnail_url": "",
+        "copyright": copyright_text,
+        "explanation": explanation,
+        "web_url": post.get("link", ""),
+    }
+
+
+def fetch_apod_from_science(target_date: datetime.date, allow_latest: bool = False) -> tuple[dict | None, bool]:
+    """
+    Fetch one day's APOD from science.nasa.gov. Returns (data, cacheable).
+    With allow_latest, falls back to the newest post when the requested day is not
+    published yet (posts go live just after midnight US Eastern); that result is
+    not cacheable so the next refresh picks up the real one.
+    """
+    iso_date = target_date.strftime("%Y-%m-%d")
+    day_before = (target_date - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    fields = "slug,link,date,title,content,featured_image,featured_image_url"
+    headers = {"User-Agent": "Omarchy-NASA-APOD-Plugin/1.0"}
+
+    def query(params: dict) -> list:
+        url = f"{SCIENCE_API_URL}?{urllib.parse.urlencode(params)}"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            posts = json.loads(resp.read().decode("utf-8"))
+        if not isinstance(posts, list):
+            return []
+        return [p for p in posts if isinstance(p, dict) and str(p.get("slug", "")).startswith("apod-")]
+
+    try:
+        posts = query({
+            "after": f"{day_before}T23:59:59",
+            "before": f"{iso_date}T23:59:59",
+            "per_page": 10,
+            "_fields": fields,
+        })
+        if posts:
+            return parse_science_post(posts[0], iso_date), True
+        if allow_latest:
+            posts = query({"search": "apod", "orderby": "date", "order": "desc", "per_page": 5, "_fields": fields})
+            if posts:
+                return parse_science_post(posts[0], iso_date), False
+    except Exception as e:
+        print(f"science.nasa.gov request failed for {iso_date}: {e}", file=sys.stderr)
+    return None, False
+
+
 def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = False) -> dict:
     """
     Fetch APOD data for a date.
@@ -353,8 +476,20 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
                 apod_raw = json.load(f)
         except Exception:
             apod_raw = None
+        if not is_usable_apod(apod_raw):
+            apod_raw = None
 
-    # Fetch from API if not cached or force refresh
+    # Fetch from science.nasa.gov if not cached or force refresh
+    if not apod_raw:
+        apod_raw, cacheable = fetch_apod_from_science(target_date, allow_latest=(target_date == today))
+        if apod_raw and cacheable:
+            try:
+                with open(cache_json_file, "w", encoding="utf-8") as f:
+                    json.dump(apod_raw, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+
+    # Fall back to the legacy API
     if not apod_raw:
         params = {
             "api_key": key,
@@ -369,6 +504,8 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = resp.read().decode("utf-8")
                 apod_raw = json.loads(data)
+                if not is_usable_apod(apod_raw):
+                    raise ValueError("legacy API returned a placeholder image")
                 # Cache raw JSON
                 with open(cache_json_file, "w", encoding="utf-8") as f:
                     f.write(data)
@@ -376,6 +513,8 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
             # Fallback to HTML scraping
             print(f"API request failed ({e}), falling back to HTML archive...", file=sys.stderr)
             apod_raw = fetch_apod_from_html(target_date)
+            if not is_usable_apod(apod_raw):
+                apod_raw = None
             if apod_raw:
                 try:
                     with open(cache_json_file, "w", encoding="utf-8") as f:
@@ -468,7 +607,7 @@ def fetch_apod(date_str: str = None, api_key: str = None, force_refresh: bool = 
         "local_image": local_image_path,
         "local_hd_image": local_hd_path,
         "local_video": local_video_path,
-        "web_url": date_to_web_url(target_date),
+        "web_url": apod_raw.get("web_url") or date_to_web_url(target_date),
         "is_today": target_date == today,
         "prev_date": prev_date,
         "next_date": next_date,

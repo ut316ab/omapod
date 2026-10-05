@@ -29,7 +29,7 @@ Explore daily astronomical wonders, watch space videos with inline transport con
 - 🖼️ **1-Click Wallpaper:** Set any APOD image as your Omarchy desktop background (strictly on-demand via the Wallpaper button).
 - 💾 **Save to Pictures:** Export HD images directly to `~/Pictures/NASA_APOD/`.
 - 📋 **Copy Image to Clipboard:** Direct binary image copying via `wl-copy` to paste directly into Discord, Telegram, GIMP, Slack, etc. (automatically disabled on videos).
-- 🌐 **Robust Dual Backend:** NASA API with automatic zero-rate-limit fallback to the official NASA APOD HTML archive (`apod.nasa.gov`).
+- 🌐 **Robust Backend:** Reads APOD from its current home on `science.nasa.gov` (no API key or rate limit), with the legacy NASA API as a fallback.
 - ⚡ **Smart Cache:** Caches metadata and media locally in `~/.cache/omarchy-omapod/`.
 
 ---
