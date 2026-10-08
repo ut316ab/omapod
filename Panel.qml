@@ -5,6 +5,7 @@ import QtMultimedia
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -27,7 +28,7 @@ Panel {
   readonly property bool isVideoPlaying: isDirectVideo && mediaViewer.playbackState === MediaPlayer.PlayingState
 
   readonly property var barIdentity: hostWidget || root
-  readonly property color foreground: bar ? bar.barForeground : Color.foreground
+  readonly property color foreground: bar ? bar.barForeground : Commons.Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.35)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -194,7 +195,7 @@ Panel {
                 text: "" // nf-fa-rocket (classic rocket ship)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display
-                color: Color.accent
+                color: Commons.Color.accent
               }
             }
 
@@ -310,7 +311,7 @@ Panel {
                 text: "󰑐"
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display
-                color: Color.accent
+                color: Commons.Color.accent
               }
 
               Text {
@@ -362,7 +363,7 @@ Panel {
                   width: Style.space(60)
                   height: Style.space(60)
                   radius: width / 2
-                  color: Color.accent
+                  color: Commons.Color.accent
 
                   Text {
                     anchors.centerIn: parent
@@ -429,7 +430,7 @@ Panel {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     radius: parent.radius
-                    color: Color.accent
+                    color: Commons.Color.accent
                     width: mediaViewer.duration > 0 ? (parent.width * (mediaViewer.position / mediaViewer.duration)) : 0
                   }
 
@@ -474,13 +475,13 @@ Panel {
                 text: "󰅙" // error
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.display
-                color: Color.urgent
+                color: Commons.Color.urgent
               }
 
               Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.apodState && root.apodState.error ? root.apodState.error : "Could not load NASA astronomy picture."
-                color: Color.urgent
+                color: Commons.Color.urgent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 horizontalAlignment: Text.AlignHCenter
@@ -574,7 +575,7 @@ Panel {
             Text {
               width: parent.width
               text: root.apodState ? (root.apodState.formatted_date || root.apodState.date || "") : ""
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true
